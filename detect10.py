@@ -33,6 +33,8 @@ term_crit = (cv.TERM_CRITERIA_EPS | cv.TERM_CRITERIA_COUNT, 10, 1)
 
 out = cv.VideoWriter('output.mp4', cv.VideoWriter_fourcc('M', 'J', 'P', 'G'), 10, (1280, 720))
 
+count = 0
+
 while(1):
     ret, frame = cap.read()
     if ret == True:
@@ -48,7 +50,7 @@ while(1):
         # img2 = cv.circle(frame, [pts], 63, (0, 0, 255), -1)
         img2 = cv.circle(frame,
                          (int(x), int(y - 20)),
-                         275,
+                         280,
                          mark_color,
                          4,
                          cv.LINE_AA)
@@ -59,8 +61,11 @@ while(1):
                          mark_color,
                          -1,
                          cv.LINE_AA)
-        # print(ret)
-        print(hsv)
+        x, y = ret[0]
+        if 400 < x < 800 and 350 < y < 400:
+            count = count + 10
+
+        cv.putText(img2, str(count // 10), (10, 450), cv.FONT_HERSHEY_SIMPLEX, 2, (0, 255, 0), 2, cv.LINE_AA)
 
         cv.imshow('img2', img2)
         out.write(img2)
@@ -72,4 +77,4 @@ while(1):
 
 cap.release()
 out.release()
-# cv.destroyAllWindows()
+cv.destroyAllWindows()
