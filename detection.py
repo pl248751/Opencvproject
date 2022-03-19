@@ -1,6 +1,5 @@
 """
-@file hough_lines.py
-@brief This program demonstrates line finding with the Hough transform
+https://docs.opencv.org/3.4/d9/db0/tutorial_hough_lines.html
 """
 import sys
 import math
