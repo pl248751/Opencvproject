@@ -142,7 +142,7 @@ def main(argv, default_file=''):
         top_point = (int((100 - b) / k), 100)
 
         if s_left[0] * s_right[0] < 0:
-            top_point = (int(src.shape[1] / 2), 0)
+            top_point = (int(center_x), 0)
 
         cv.arrowedLine(src, (int(center_x), int(center_y)), top_point, (0, 255, 0), 5)
         print(center_x, center_y)
