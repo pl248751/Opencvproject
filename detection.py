@@ -1,7 +1,3 @@
-"""
-@file hough_lines.py
-@brief This program demonstrates line finding with the Hough transform
-"""
 import sys
 import math
 import cv2 as cv
@@ -12,8 +8,7 @@ from collections import Counter
 def connect_dots(src, dots):
     prev_pt = dots[0]
     for pt in dots:
-
-        cv.line(src, prev_pt, pt, (0, 0, 255), 3, cv.LINE_AA)
+        cv.line(src, prev_pt, pt, (0, 255), 3, cv.LINE_AA)
         prev_pt = pt
 
 
@@ -24,7 +19,15 @@ def connect_lines(src, lines):
     for line in lines:
         pt = line[:2]
         cv.line(src, prev_pt, pt, (0, 0, 255), 3, cv.LINE_AA)
-        prev_pt = pt
+        prev_pt = line[-2:]
+
+
+def show_lines(src, lines):
+    for line in lines:
+        pt1 = line[:2]
+        pt2 = line[-2:]
+        cv.line(src, pt1, pt2, (0, 0, 255), 3, cv.LINE_AA)
+        prev_pt = line[-2:]
 
 
 def dist(p1, p2):
@@ -36,234 +39,135 @@ def dist(p1, p2):
     return distance
 
 
-def slope(pt1, pt2):
-    x1, y1 = pt1
-    x2, y2 = pt2
-    return (y1 - y2) / (x1 - x2)
-
-
-all_xs = []
-all_ys = []
-
-
 def main(argv, default_file=''):
-
+    # img = cv.imread('right.jpg')
     filename = argv[0] if len(argv) > 0 else default_file
-    # Loads an image
-    src = cv.imread(cv.samples.findFile(filename), cv.IMREAD_COLOR)
-    # Check if image is loaded fine
-    if src is None:
-        print('Error opening image!')
-        print('Usage: hough_lines.py [image_name -- default ' + default_file + '] \n')
-        return -1
+    img = cv.imread(cv.samples.findFile(filename), cv.IMREAD_COLOR)
+    gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
 
-    dst = cv.Canny(src, 50, 200, None, 3)
+    kernel_size = 5
+    blur_gray = cv.GaussianBlur(gray, (kernel_size, kernel_size), 0)
+    # Second, process edge detection use Canny.
 
-    # Copy edges to the images that will display the results in BGR
-    cdst = cv.cvtColor(dst, cv.COLOR_GRAY2BGR)
-    cdstP = np.copy(cdst)
+    low_threshold = 380
+    high_threshold = 5
+    edges = cv.Canny(blur_gray, low_threshold, high_threshold)
+    # Then, use HoughLinesP to get the lines. You can adjust the parameters for better performance.
 
-    lines = cv.HoughLines(dst, 1, np.pi / 180, 150, None, 0, 0)
+    rho = 1  # distance resolution in pixels of the Hough grid
+    theta = np.pi / 180  # angular resolution in radians of the Hough grid
+    threshold = 15  # minimum number of votes (intersections in Hough grid cell)
+    min_line_length = 50  # minimum number of pixels making up a line
+    max_line_gap = 20  # maximum gap in pixels between connectable line segments
+    line_image = np.copy(img) * 0  # creating a blank to draw lines on
 
-    if lines is not None:
-        for i in range(0, len(lines)):
-            rho = lines[i][0][0]
-            theta = lines[i][0][1]
-            a = math.cos(theta)
-            b = math.sin(theta)
-            x0 = a * rho
-            y0 = b * rho
-            # pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * (a)))
-            # pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * (a)))
-            pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * (a)))
-            pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * (a)))
-
-            # if abs(slope(pt1, pt2)) > 0.3:
-            x1, y1 = pt1
-            x2, y2 = pt2
-            # x1 = max(x1, 0)
-            # x2 = max(x2, 0)
-            # y1 = max(y1, 0)
-            # y2 = max(y2, 0)
-            # print(pt1, pt2)
-            # if x1 >= 0 and y1 >= 0 and x2 >= 0 and y2 >= 0:
-            cv.line(cdst, (x1, y1), (x2, y2), (0, 0, 255), 3, cv.LINE_AA)
-
-    linesP = cv.HoughLinesP(dst, 1, np.pi / 180, 50, None, 50, 10)
-    cv.imshow("Source", src)
-
-    points = []
-    ls = []
-    rs = []
-    total_slope = 0
+    # Run Hough on edge detected image
+    # Output "lines" is an array containing endpoints of detected line segments
+    lines = cv.HoughLinesP(edges, rho, theta, threshold, np.array([]),
+                           min_line_length, max_line_gap)
 
     valid_lines = []
 
-    if linesP is not None:
+    for line in lines:
+        print(line)
+        # for x1, y1, x2, y2 in line:
 
-        # top
-        top_min_y = 2000
-        top_min_x = 0
+        x1, y1, x2, y2 = line[0]
+        cv.line(line_image, (x1, y1), (x2, y2), (255, 0, 0), 5)
+        cv.line(img, (x1, y1), (x2, y2), (255, 0, 0), 5)
+        lines_edges = cv.addWeighted(img, 0.8, line_image, 1, 0)
+        cv.imshow("org", img)
+        # if y1 <= 600:
+        valid_lines.append(line[0])
 
-        centers = []
+    valid_lines.sort(key=lambda x: x[1])
+    valid_lines.pop(0)
+    valid_lines.pop()
+    print('------sorted-----')
+    print(valid_lines)
+    print('------sorted-----')
 
-        l = linesP[0][0]
-        pt1_prev = (l[0], l[1])
-        pt2_prev = (l[2], l[3])
-        for i in range(0, len(linesP)):
-            l = linesP[i][0]
-            pt1 = (l[0], l[1])
-            pt2 = (l[2], l[3])
-            points.append(pt1)
-            points.append(pt2)
+    ls = []
+    rs = []
 
-            # point_slope = slope(pt1, pt2)
-            if 100 < l[1] < 930 and 100 < l[3] < 730 and (950 > l[0] > 350 or 350 < l[2] < 1300):
-                # if 1:
-                print(l)
-                valid_lines.append(l)
+    # valid_lines.pop()
+    # valid_lines.pop()
 
-                # ls.append(round(point_slope, 2))
-                cv.line(cdstP, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), 3, cv.LINE_AA)
-                # distance_1 = dist(pt1, pt1_prev)
-                # distance_2 = dist(pt1, pt2_prev)
-                # print(distance_2, distance_1)
+    ls.append(valid_lines.pop(0))
+    # rs.append(valid_lines.pop(0))
+    print("------before---")
+    print(ls)
+    print(rs)
+    print("------before---")
 
-                if abs([1] - l[3]) < 200 and abs(l[0] - l[2]) > 400:
-                    pt3 = ((l[0] + l[2]) // 2, (l[3] + l[1]) // 2)
-                    print('\t', pt3)
-                    centers.append(pt3)
+    count = 0
+    for line in valid_lines:
+        count += 1
+        point = line[:2]
 
-                if abs(l[0] - l[2]) < 200 and abs([1] - l[3]) > 400:
-                    pt4 = ((l[0] + l[2]) // 2, (l[3] + l[1]) // 2)
-                    print('\t', pt4)
-                    centers.append(pt4)
+        # if not rs and dist(point, ls[-1][-2:]) < 330:
+        # if dist(point, ls[-1][-2:]) < dist(point, rs[-1][-2:]):
+        ls_dist = dist(point, ls[-1][-2:])
 
-            pt1_prev = pt1
-            pt2_prev = pt2
+        rs_dist = ls_dist / 2
+        if rs:
+            rs_dist = dist(point, rs[-1][-2:])
 
-        # top_x, top_y = sum(top_points[0]) / len(top_points), sum(top_points[1]) / len(top_points)
-        print('-------')
-        print(centers)
-        centers.sort()
+        # dist(point, rs[-1][-2:]):
+        if ls_dist < rs_dist:
+            ls.append(line)
+        else:
+            rs.append(line)
+        # if count == 10:
+        #     break
+    # Finally, draw the lines on your srcImage.
+    print("------after---")
+    print(ls)
+    print(rs)
+    print("------after---")
 
-        print('----all lines---')
-        valid_lines.sort(key=lambda x: x[1])
-        ls.append(valid_lines.pop())
-        rs.append(valid_lines.pop())
-        # for p in valid_lines:
-        while valid_lines:
-            valid_line = valid_lines.pop()
-            point = valid_line[:2]
-            if dist(point, ls[-1][:2]) < dist(point, rs[-1][:2]):
-                ls.append(valid_line)
-            else:
-                rs.append(valid_line)
-            # dist(p,)
-            # print(p)
-        # connect_lines(src, ls)
-        # connect_lines(src, rs)
-        real_centers = []
-        for i in range(min(len(ls), len(rs))):
-            # real_centers.append()
+    rs.sort(key=lambda x: x[1])
+    ls.sort(key=lambda x: x[1])
 
-            lx1, ly1, lx2, ly2 = ls[i]
-            rx1, ry1, rx2, ry2 = rs[i]
+    # show_lines(img, valid_lines[:15])
+    show_lines(img, rs)
+    # Draw the lines on the  image
 
-            if abs(lx1 - rx1) > 50 and abs(ly1 - ry1) < 50:
-                center = ((lx1 + rx1) // 2, (ly1 + ry1) // 2)
-                real_centers.append(center)
+    real_centers = []
+    for i in range(min(len(ls), len(rs))):
+        # real_centers.append()
 
-            if abs(lx1 - rx1) < 50 and abs(ly1 - ry1) > 50:
-                center1 = ((lx1 + rx1) // 2, (ly1 + ry1) // 2)
-                real_centers.append(center1)
+        lx1, ly1, lx2, ly2 = ls[i]
+        rx1, ry1, rx2, ry2 = rs[i]
 
-        connect_dots(src, real_centers)
+        # if abs(lx1 - rx1) > 50 and abs(ly1 - ry1) < 50:
+        center = ((lx1 + rx1) // 2, (ly1 + ry1) // 2)
+        # if center - lx1
+        real_centers.append(center)
 
-        # dp1 = [844, 673, 878, 600]
-        # dp2 = [849, 660, 872, 610]
-        # dp1 = valid_lines[-1]
-        # dp2 = valid_lines[-2]
+        # if abs(lx1 - rx1) < 50 and abs(ly1 - ry1) > 50:
+        #     center1 = ((lx1 + rx1) // 2, (ly1 + ry1) // 2)
+        #     real_centers.append(center1)
 
-        # cv.line(src, dp1[:2], dp1[-2:], (255, 0, 0), 3, cv.LINE_AA)
-        # cv.line(src, dp2[:2], dp2[-2:], (255, 0, 0), 3, cv.LINE_AA)
+    lx1, ly1, lx2, ly2 = ls[-1]
+    rx1, ry1, rx2, ry2 = rs[-1]
+    center = ((lx1 + rx1) // 2, (ly1 + ry1) // 2)
+    real_centers.append(center)
+    print('------centers------')
+    print(real_centers)
+    connect_dots(img, real_centers)
 
-        '''
-        prev_pt = centers[0]
-        for pt in centers[1:]:
-            cv.line(src, prev_pt, pt, (0, 0, 255), 3, cv.LINE_AA)
-            prev_pt = pt
+    lines_edges = cv.addWeighted(img, 0.8, line_image, 1, 0)
 
-        '''
-    #             x1, y1 = pt1
-    #             x2, y2 = pt2
-    #             all_xs.append(x1)
-    #             all_xs.append(x2)
-
-    #             all_ys.append(y1)
-    #             all_ys.append(y2)
-
-    #             # base
-    #             # if l[0] < base_min_x:
-    #             #     base_min_x = l[0]
-    #             #     base_min_y = l[1]
-    #             # if l[2] < base_min_x:
-    #             #     base_min_x = l[2]
-    #             #     base_min_y = l[3]
-
-    #             # if l[1] > base_max_y:
-    #             #     base_max_y = l[1]
-    #             #     base_max_x = l[2]
-    #             # if l[3] > base_max_y:
-    #             #     base_max_y = l[3]
-    #             #     base_max_x = l[2]
-
-    #             # top
-    #             # if len(top_points) < 4:
-    #             #     if l[1] < top_points[-1][1]:
-    #             #         top_min_y = l[1]
-    #             #         top_points.append((l[0], top_min_y))
-    #             #     if l[2] < top_points[-1][1]:
-    #             #         top_min_y = l[3]
-    #             #         top_points.append((l[2], top_min_y))
-    #             points.sort(key=lambda x: x[1])
-
-    #     top_points = points[:2]
-    #     # print(top_points)
-    #     # ls.sort()
-    #     print(sum(ls) / len(ls))
-    #     print(ls)
-    #     stat = Counter(ls)
-    #     s_left, s_right = stat.most_common(2)
-    #     print(s_left[0], s_right[0])
-
-        # center_x, center_y = sum(all_xs) / len(all_xs), sum(all_ys) / len(all_ys)
-        # top_x, top_y = sum(top_points[0]) / len(top_points), sum(top_points[1]) / len(top_points)
-        # cv.line(src, (int(top_x), int(top_y)), (int(center_x), int(center_y)), (0, 255, 0), 5)
-
-    #     # y = kx + b
-    #     k = (s_left[0] + s_right[0]) / 2q
-    #     b = center_y - center_x * k
-
-    #     top_point = (int((100 - b) / k), 100)
-
-    #     if s_left[0] * s_right[0] < 0:
-    #         top_point = (int(center_x), 0)
-
-    #     cv.arrowedLine(src, (int(center_x), int(center_y)), top_point, (0, 255, 0), 5)
-    #     cv.imwrite(filename + 'maked.png', src)
-    #     print(center_x, center_y)
-
-    cv.imshow("Source", src)
-    # cv.imshow("Detected Lines (in red) - Standard Hough Line Transform", cdst)
-    cv.imshow("Detected Lines (in red) - Probabilistic Line Transform", cdstP)
+    cv.imshow("Source", line_image)
+    cv.imshow("org", img)
 
     cv.waitKey()
     return 0
 
 
 if __name__ == "__main__":
-    default_file = 'flat.jpeg'
+    default_file = 'l.jpg'
     main(sys.argv[1:], default_file)
-    default_file = 'tilt_r.jpeg'
+    default_file = 'r.jpg'
     main(sys.argv[1:], default_file)
