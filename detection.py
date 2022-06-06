@@ -1,14 +1,55 @@
+import numpy as np
+import cv2 as cv
+import argparse
 import sys
 import math
-import cv2 as cv
-import numpy as np
 from collections import Counter
 
 
+mark_radius = 1
+mark_color = (0, 0, 255)
+
+# parser = argparse.ArgumentParser(description='This sample demonstrates the camshift algorithm. \
+#                                               The example file can be downloaded from: \
+#                                               https://www.bogotobogo.com/python/OpenCV_Python/images/mean_shift_tracking/slow_traffic_small.mp4')
+# parser.add_argument('image', type=str, help='path to image file')
+# parser.add_argument('video', type=str, help='big.mp4')
+# args = parser.parse_args()
+# args.image = 'big.mp4'
+# cap = cv.VideoCapture(args.image)
+cap = cv.VideoCapture('run.mp4')
+VIDEO_W = cap.get(cv.CAP_PROP_FRAME_WIDTH)
+VIDEO_H = cap.get(cv.CAP_PROP_FRAME_HEIGHT)
+
+# sys.exit(0)
+
+# take first frame of the video
+ret, frame = cap.read()
+# setup initial location of window
+x, y, w, h = 300, 200, 100, 50  # simply hardcoded the values
+track_window = (x, y, w, h)
+# set up the ROI for tracking
+roi = frame[y:y + h, x:x + w]
+hsv_roi = cv.cvtColor(roi, cv.COLOR_BGR2HSV)
+mask = cv.inRange(hsv_roi, np.array((0., 60., 32.)), np.array((180., 255., 255.)))
+roi_hist = cv.calcHist([hsv_roi], [0], mask, [180], [0, 180])
+cv.normalize(roi_hist, roi_hist, 0, 255, cv.NORM_MINMAX)
+# Setup the termination criteria, either 10 iteration or move by at least 1 pt
+term_crit = (cv.TERM_CRITERIA_EPS | cv.TERM_CRITERIA_COUNT, 10, 1)
+
+# out = cv.VideoWriter('output.mp4', -1, 20.0, (1280, 720))
+
+
+out = cv.VideoWriter('output.mp4', cv.VideoWriter_fourcc('M', 'J', 'P', 'G'), 10, (int(VIDEO_W), int(VIDEO_H)))
+
+
 def connect_dots(src, dots):
+    if not dots:
+        return
     prev_pt = dots[0]
     for pt in dots:
-        cv.line(src, prev_pt, pt, (0, 255), 3, cv.LINE_AA)
+
+        cv.line(src, prev_pt, pt, (0, 0, 255), 3, cv.LINE_AA)
         prev_pt = pt
 
 
@@ -19,15 +60,7 @@ def connect_lines(src, lines):
     for line in lines:
         pt = line[:2]
         cv.line(src, prev_pt, pt, (0, 0, 255), 3, cv.LINE_AA)
-        prev_pt = line[-2:]
-
-
-def show_lines(src, lines):
-    for line in lines:
-        pt1 = line[:2]
-        pt2 = line[-2:]
-        cv.line(src, pt1, pt2, (0, 0, 255), 3, cv.LINE_AA)
-        prev_pt = line[-2:]
+        prev_pt = pt
 
 
 def dist(p1, p2):
@@ -39,135 +72,178 @@ def dist(p1, p2):
     return distance
 
 
-def main(argv, default_file=''):
-    # img = cv.imread('right.jpg')
-    filename = argv[0] if len(argv) > 0 else default_file
-    img = cv.imread(cv.samples.findFile(filename), cv.IMREAD_COLOR)
-    gray = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
-
-    kernel_size = 5
-    blur_gray = cv.GaussianBlur(gray, (kernel_size, kernel_size), 0)
-    # Second, process edge detection use Canny.
-
-    low_threshold = 380
-    high_threshold = 5
-    edges = cv.Canny(blur_gray, low_threshold, high_threshold)
-    # Then, use HoughLinesP to get the lines. You can adjust the parameters for better performance.
-
-    rho = 1  # distance resolution in pixels of the Hough grid
-    theta = np.pi / 180  # angular resolution in radians of the Hough grid
-    threshold = 15  # minimum number of votes (intersections in Hough grid cell)
-    min_line_length = 50  # minimum number of pixels making up a line
-    max_line_gap = 20  # maximum gap in pixels between connectable line segments
-    line_image = np.copy(img) * 0  # creating a blank to draw lines on
-
-    # Run Hough on edge detected image
-    # Output "lines" is an array containing endpoints of detected line segments
-    lines = cv.HoughLinesP(edges, rho, theta, threshold, np.array([]),
-                           min_line_length, max_line_gap)
-
-    valid_lines = []
-
-    for line in lines:
-        print(line)
-        # for x1, y1, x2, y2 in line:
-
-        x1, y1, x2, y2 = line[0]
-        cv.line(line_image, (x1, y1), (x2, y2), (255, 0, 0), 5)
-        cv.line(img, (x1, y1), (x2, y2), (255, 0, 0), 5)
-        lines_edges = cv.addWeighted(img, 0.8, line_image, 1, 0)
-        cv.imshow("org", img)
-        # if y1 <= 600:
-        valid_lines.append(line[0])
-
-    valid_lines.sort(key=lambda x: x[1])
-    valid_lines.pop(0)
-    valid_lines.pop()
-    print('------sorted-----')
-    print(valid_lines)
-    print('------sorted-----')
-
-    ls = []
-    rs = []
-
-    # valid_lines.pop()
-    # valid_lines.pop()
-
-    ls.append(valid_lines.pop(0))
-    # rs.append(valid_lines.pop(0))
-    print("------before---")
-    print(ls)
-    print(rs)
-    print("------before---")
-
-    count = 0
-    for line in valid_lines:
-        count += 1
-        point = line[:2]
-
-        # if not rs and dist(point, ls[-1][-2:]) < 330:
-        # if dist(point, ls[-1][-2:]) < dist(point, rs[-1][-2:]):
-        ls_dist = dist(point, ls[-1][-2:])
-
-        rs_dist = ls_dist / 2
-        if rs:
-            rs_dist = dist(point, rs[-1][-2:])
-
-        # dist(point, rs[-1][-2:]):
-        if ls_dist < rs_dist:
-            ls.append(line)
-        else:
-            rs.append(line)
-        # if count == 10:
-        #     break
-    # Finally, draw the lines on your srcImage.
-    print("------after---")
-    print(ls)
-    print(rs)
-    print("------after---")
-
-    rs.sort(key=lambda x: x[1])
-    ls.sort(key=lambda x: x[1])
-
-    # show_lines(img, valid_lines[:15])
-    show_lines(img, rs)
-    # Draw the lines on the  image
-
-    real_centers = []
-    for i in range(min(len(ls), len(rs))):
-        # real_centers.append()
-
-        lx1, ly1, lx2, ly2 = ls[i]
-        rx1, ry1, rx2, ry2 = rs[i]
-
-        # if abs(lx1 - rx1) > 50 and abs(ly1 - ry1) < 50:
-        center = ((lx1 + rx1) // 2, (ly1 + ry1) // 2)
-        # if center - lx1
-        real_centers.append(center)
-
-        # if abs(lx1 - rx1) < 50 and abs(ly1 - ry1) > 50:
-        #     center1 = ((lx1 + rx1) // 2, (ly1 + ry1) // 2)
-        #     real_centers.append(center1)
-
-    lx1, ly1, lx2, ly2 = ls[-1]
-    rx1, ry1, rx2, ry2 = rs[-1]
-    center = ((lx1 + rx1) // 2, (ly1 + ry1) // 2)
-    real_centers.append(center)
-    print('------centers------')
-    print(real_centers)
-    connect_dots(img, real_centers)
-
-    lines_edges = cv.addWeighted(img, 0.8, line_image, 1, 0)
-
-    cv.imshow("Source", line_image)
-    cv.imshow("org", img)
-
-    cv.waitKey()
-    return 0
+def slope(pt1, pt2):
+    x1, y1 = pt1
+    x2, y2 = pt2
+    return (y1 - y2) / (x1 - x2)
 
 
-if __name__ == "__main__":
-    default_file = 'l.jpg'
-    main(sys.argv[1:], default_file)
-    default_file = 'r.jpg'
-    main(sys.argv[1:], default_file)
+while True:
+    ret, frame = cap.read()
+    if ret == True:
+        hsv = cv.cvtColor(frame, cv.COLOR_BGR2HSV)
+        dst = cv.calcBackProject([hsv], [0], roi_hist, [0, 180], 1)
+        # apply camshift to get the new location
+        ret, track_window = cv.CamShift(dst, track_window, term_crit)
+        # Draw it on image
+        # pts = cv.boxPoints(ret)
+        # pts = np.int0(pts)
+
+        # img2 = cv.polylines(frame, [pts], True, 255, 2)
+        # img2 = cv.circle(frame, [pts], 63, (0, 0, 255), -1)
+        img2 = cv.circle(frame,
+                         (int(x) + int(VIDEO_W / 2), int(y) + 50),
+                         5,
+                         mark_color,
+                         20,
+                         cv.LINE_AA)
+        x, y = ret[0]
+        # img2 = cv.circle(frame,
+        #                  (int(x), int(y - 20)),
+        #                  mark_radius,
+        #                  mark_color,
+        #                  -1,
+        #                  cv.LINE_AA)
+
+        # image process
+        dst = cv.Canny(img2, 50, 100, None, 3)
+
+        # Copy edges to the images that will display the results in BGR
+        cdst = cv.cvtColor(dst, cv.COLOR_GRAY2BGR)
+        cdstP = np.copy(cdst)
+
+        lines = cv.HoughLines(dst, 1, np.pi / 180, 150, None, 0, 0)
+
+        if lines is not None:
+            for i in range(0, len(lines)):
+                rho = lines[i][0][0]
+                theta = lines[i][0][1]
+                a = math.cos(theta)
+                b = math.sin(theta)
+                x0 = a * rho
+                y0 = b * rho
+                # pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * (a)))
+                # pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * (a)))
+                pt1 = (int(x0 + 1000 * (-b)), int(y0 + 1000 * (a)))
+                pt2 = (int(x0 - 1000 * (-b)), int(y0 - 1000 * (a)))
+
+                # if abs(slope(pt1, pt2)) > 0.3:
+                x1, y1 = pt1
+                x2, y2 = pt2
+                # x1 = max(x1, 0)
+                # x2 = max(x2, 0)
+                # y1 = max(y1, 0)
+                # y2 = max(y2, 0)
+                # if x1 >= 0 and y1 >= 0 and x2 >= 0 and y2 >= 0:
+                cv.line(cdst, (x1, y1), (x2, y2), (0, 0, 255), 3, cv.LINE_AA)
+
+        linesP = cv.HoughLinesP(dst, 1, np.pi / 180, 50, None, 50, 10)
+        # cv.imshow("Source", img2)
+
+        # points = []
+        ls = []
+        rs = []
+        total_slope = 0
+
+        valid_lines = []
+
+        if linesP is not None:
+
+            # top
+
+            centers = []
+
+            l = linesP[0][0]
+            pt1_prev = (l[0], l[1])
+            pt2_prev = (l[2], l[3])
+            for i in range(0, len(linesP)):
+                l = linesP[i][0]
+                pt1 = (l[0], l[1])
+                pt2 = (l[2], l[3])
+                # points.append(pt1)
+                # points.append(pt2)
+
+                # point_slope = slope(pt1, pt2)
+                # if 270 < l[1] < 544 and 270 < l[3] < 544 and (600 > l[0] > 400 or 240 < l[2] < 400):
+                # if 1:
+                if l[0] > 200 and l[0] < 750 or l[3] > 200 and l[3] < 750:
+                    valid_lines.append(l)
+
+                # ls.append(round(point_slope, 2))
+                cv.line(cdstP, (l[0], l[1]), (l[2], l[3]), (0, 0, 255), 3, cv.LINE_AA)
+                # distance_1 = dist(pt1, pt1_prev)
+                # distance_2 = dist(pt1, pt2_prev)
+
+                if abs([1] - l[3]) < 200 and abs(l[0] - l[2]) > 400:
+                    pt3 = ((l[0] + l[2]) // 2, (l[3] + l[1]) // 2)
+                    # print('\t', pt3)
+                    centers.append(pt3)
+
+                if abs(l[0] - l[2]) < 200 and abs([1] - l[3]) > 400:
+                    pt4 = ((l[0] + l[2]) // 2, (l[3] + l[1]) // 2)
+                    # print('\t', pt4)
+                    centers.append(pt4)
+
+                pt1_prev = pt1
+                pt2_prev = pt2
+
+            # top_x, top_y = sum(top_points[0]) / len(top_points), sum(top_points[1]) / len(top_points)
+            # print(centers)
+            # centers.sort()
+
+            valid_lines.sort(key=lambda x: x[1])
+            ls.append(valid_lines.pop())
+            rs.append(valid_lines.pop())
+            # for p in valid_lines:
+            while valid_lines:
+                valid_line = valid_lines.pop()
+                point = valid_line[:2]
+                if dist(point, ls[-1][:2]) < dist(point, rs[-1][:2]):
+                    ls.append(valid_line)
+                else:
+                    rs.append(valid_line)
+                # dist(p,)
+                # print(p)
+            # connect_lines(src, ls)
+            # connect_lines(src, rs)
+            real_centers = []
+            for i in range(min(len(ls), len(rs))):
+                # real_centers.append()
+
+                lx1, ly1, lx2, ly2 = ls[i]
+                rx1, ry1, rx2, ry2 = rs[i]
+                if lx1 > 700 or lx2 > 700 or rx1 > 700 or rx2 > 700:
+                    continue
+
+                if abs(lx1 - rx1) > 200 and abs(ly1 - ry1) < 50:
+                    center = ((lx1 + rx1) // 2, (ly1 + ry1) // 2)
+                    real_centers.append(center)
+
+                if abs(lx1 - rx1) < 200 and abs(ly1 - ry1) < 50:
+                    center1 = ((lx1 + rx1) // 2, (ly1 + ry1) // 2)
+                    real_centers.append(center1)
+
+            # connect_dots(img2, real_centers)
+            # connect_dots(img2, rs)
+            total_x = sum([point[0] for point in real_centers])
+            # total_y = sum([point[1] for point in real_centers])
+
+            print(len(ls), len(rs), len(real_centers), mark_color)
+
+            if real_centers and abs(total_x / len(real_centers) - VIDEO_W / 2) < 180:
+                mark_color = (0, 255, 0)
+            else:
+                mark_color = (0, 0, 255)
+            print(mark_color, len(real_centers), real_centers)
+            # cv.waitKey()
+            # return 0
+
+        cv.imshow('img2', img2)
+        out.write(img2)
+        k = cv.waitKey(30) & 0xff
+    else:
+        break
+
+cap.release()
+out.release()
+cv.destroyAllWindows()
